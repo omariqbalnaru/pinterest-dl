@@ -15,34 +15,43 @@ A = "a" * 32
 B = "b" * 32
 C = "c" * 32
 
+# Synthetic fixtures. Repeated digits and sequential hex are deliberate: unlike
+# a plausible-looking random id, none of these can be mistaken for — or ever
+# become — a real identifier.
+PIN_ID = "1" * 18        # 18+ trailing digits, as classify() expects
+MULTI_ID = "9" * 19
+SENDER = "2" * 18
+INVITE = "0" * 32
+SLUG = "example-pin-slug"
+
 
 class TestClassify(unittest.TestCase):
     def test_plain_pin(self):
-        kind, pid, canon = pdl.classify("https://www.pinterest.com/pin/123456789012345678/")
-        self.assertEqual((kind, pid), ("pin", "123456789012345678"))
-        self.assertEqual(canon, "https://www.pinterest.com/pin/123456789012345678/")
+        kind, pid, canon = pdl.classify(f"https://www.pinterest.com/pin/{PIN_ID}/")
+        self.assertEqual((kind, pid), ("pin", PIN_ID))
+        self.assertEqual(canon, f"https://www.pinterest.com/pin/{PIN_ID}/")
 
     def test_feedback_pin_with_query(self):
         """The /feedback/ variant must still resolve to the bare pin path."""
-        url = ("https://www.pinterest.com/pin/123456789012345678/feedback/"
-               "?invite_code=abcdef01&sender_id=123456789012345678")
+        url = (f"https://www.pinterest.com/pin/{PIN_ID}/feedback/"
+               f"?invite_code={INVITE}&sender_id={SENDER}")
         kind, pid, canon = pdl.classify(url)
-        self.assertEqual((kind, pid), ("pin", "123456789012345678"))
-        self.assertEqual(canon, "https://www.pinterest.com/pin/123456789012345678/")
+        self.assertEqual((kind, pid), ("pin", PIN_ID))
+        self.assertEqual(canon, f"https://www.pinterest.com/pin/{PIN_ID}/")
 
     def test_slug_pin(self):
         kind, pid, _ = pdl.classify(
-            "https://www.pinterest.com/pin/example-pin-slug--123456789012345678/")
-        self.assertEqual((kind, pid), ("pin", "123456789012345678"))
+            f"https://www.pinterest.com/pin/{SLUG}--{PIN_ID}/")
+        self.assertEqual((kind, pid), ("pin", PIN_ID))
 
     def test_multi_pin_keeps_query(self):
         """Multi-pin links need their invite_code, so the query must survive."""
-        url = ("https://www.pinterest.com/multi-pin-share/1234567890123456789/"
-               "?invite_code=abcdef01&sender=123456789012345678")
+        url = (f"https://www.pinterest.com/multi-pin-share/{MULTI_ID}/"
+               f"?invite_code={INVITE}&sender={SENDER}")
         kind, pid, canon = pdl.classify(url)
         self.assertEqual(kind, "multi-pin-share")
-        self.assertEqual(pid, "1234567890123456789")
-        self.assertIn("invite_code=abcdef01", canon)
+        self.assertEqual(pid, MULTI_ID)
+        self.assertIn(f"invite_code={INVITE}", canon)
 
     def test_unknown(self):
         self.assertEqual(pdl.classify("https://example.com/x")[0], "unknown")
@@ -62,8 +71,8 @@ class TestModeSelection(unittest.TestCase):
     def test_short_link_resolving_to_multi_pin_requires_browser(self):
         """pin.it links are opaque until resolved; once resolved to a
         multi-pin share, browser mode must be selected automatically."""
-        resolved = ("https://www.pinterest.com/multi-pin-share/1234567890123456789/"
-                    "?invite_code=abcdef01")
+        resolved = (f"https://www.pinterest.com/multi-pin-share/{MULTI_ID}/"
+                    f"?invite_code={INVITE}")
         kind, _, _ = pdl.classify(resolved)
         self.assertTrue(pdl.needs_browser(kind))
 
@@ -72,7 +81,7 @@ class TestNoise(unittest.TestCase):
     def test_rejects_non_pin_assets(self):
         for url in [
             cdn("upload", A, "jpg"),
-            "https://i.pinimg.com/retention-1days/mps_1234567890123456789.jpg",
+            f"https://i.pinimg.com/retention-1days/mps_{MULTI_ID}.jpg",
             "https://i.pinimg.com/videos/thumbnails/originals/aa/bb/cc/x.jpg",
         ]:
             self.assertTrue(pdl._is_noise(url), url)

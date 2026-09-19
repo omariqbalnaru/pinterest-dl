@@ -5,8 +5,11 @@ resolution Pinterest serves.
 
 ```bash
 pip install requests
-python pinterest_dl.py https://www.pinterest.com/pin/123456789012345678/
+python pinterest_dl.py "https://www.pinterest.com/pin/<pin-id>/"
 ```
+
+(Every URL in this README is a placeholder — `<pin-id>`, `<code>`, `<url>` are
+never real identifiers.)
 
 ## Link types
 

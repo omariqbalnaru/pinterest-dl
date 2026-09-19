@@ -704,9 +704,11 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "examples:\n"
-            "  python pinterest_dl.py https://www.pinterest.com/pin/123456789012345678/\n"
-            "  python pinterest_dl.py https://www.pinterest.com/multi-pin-share/1234567890123456789/?invite_code=abcdef01\n"
+            '  python pinterest_dl.py "https://www.pinterest.com/pin/<pin-id>/"\n'
+            '  python pinterest_dl.py "https://www.pinterest.com/multi-pin-share/<id>/?invite_code=<code>"\n'
             "  python pinterest_dl.py --input links.txt --out ~/Pictures/pins\n"
+            "\n"
+            "URLs above are placeholders; supply your own links.\n"
         ),
     )
     p.add_argument("urls", nargs="*", help="one or more Pinterest URLs")
