@@ -37,15 +37,30 @@ UA = (
 )
 HEADERS = {
     "User-Agent": UA,
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    ),
     "Accept-Language": "en-US,en;q=0.9",
 }
 
 # Pinterest serves the same image at many sizes. Bigger is not alphabetical
 # (600x315 vs 564x), so ranking is explicit.
 SIZE_PREF = [
-    "originals", "orig", "750x", "736x", "600x315", "564x", "474x",
-    "400x300", "236x", "200x150", "170x", "136x136", "75x75", "60x60", "50x50",
+    "originals",
+    "orig",
+    "750x",
+    "736x",
+    "600x315",
+    "564x",
+    "474x",
+    "400x300",
+    "236x",
+    "200x150",
+    "170x",
+    "136x136",
+    "75x75",
+    "60x60",
+    "50x50",
 ]
 IMAGE_EXTS = ("jpg", "png", "webp", "gif")
 
@@ -59,13 +74,9 @@ PINIMG_RE = re.compile(
 IMAGES_ORIG_RE = re.compile(
     r'"images_orig"\s*:\s*\{[^{}]*?"url"\s*:\s*"(https://i\.pinimg\.com/[^"]+)"'
 )
-LD_JSON_RE = re.compile(
-    r'<script[^>]*application/ld\+json[^>]*>(.*?)</script>', re.S | re.I
-)
+LD_JSON_RE = re.compile(r"<script[^>]*application/ld\+json[^>]*>(.*?)</script>", re.S | re.I)
 META_TAG_RE = re.compile(r"<meta\b[^>]*>", re.I)
-PRELOAD_RE = re.compile(
-    r'<link\b[^>]*rel=["\']preload["\'][^>]*>', re.I
-)
+PRELOAD_RE = re.compile(r'<link\b[^>]*rel=["\']preload["\'][^>]*>', re.I)
 IMG_TAG_RE = re.compile(r"<img\b[^>]*>", re.I)
 ATTR_RE = r"""\b{name}\s*=\s*(?:"([^"]*)"|'([^']*)')"""
 
@@ -81,6 +92,7 @@ MAGIC = {
 # --------------------------------------------------------------------------- #
 # model
 # --------------------------------------------------------------------------- #
+
 
 @dataclass
 class Image:
@@ -108,7 +120,7 @@ class Image:
 @dataclass
 class Page:
     url: str
-    kind: str                      # "pin" | "multi-pin-share" | "unknown"
+    kind: str  # "pin" | "multi-pin-share" | "unknown"
     pin_id: str = ""
     title: str = ""
     images: list[Image] = field(default_factory=list)
@@ -118,6 +130,7 @@ class Page:
 # url handling
 # --------------------------------------------------------------------------- #
 
+
 def classify(url: str) -> tuple[str, str, str]:
     """Return (kind, pin_id, canonical_url) for a Pinterest URL."""
     p = urlparse(url if "://" in url else "https://" + url)
@@ -126,7 +139,7 @@ def classify(url: str) -> tuple[str, str, str]:
     m = re.search(r"/pin/([^/]+)", path)
     if m:
         seg = m.group(1)
-        idm = re.search(r"(\d{8,})$", seg)   # plain id, or slug--id
+        idm = re.search(r"(\d{8,})$", seg)  # plain id, or slug--id
         pin_id = idm.group(1) if idm else seg
         # /pin/<id>/feedback/ etc. all resolve from the bare pin path
         return "pin", pin_id, f"https://www.pinterest.com/pin/{pin_id}/"
@@ -155,6 +168,7 @@ def resolve_short_url(session: requests.Session, url: str) -> str:
 # --------------------------------------------------------------------------- #
 # static extraction
 # --------------------------------------------------------------------------- #
+
 
 def _attr(tag: str, name: str) -> str:
     m = re.search(ATTR_RE.format(name=name), tag, re.I | re.S)
@@ -192,8 +206,13 @@ def _images_from_meta(html: str) -> list[str]:
     out: list[str] = []
     for tag in META_TAG_RE.findall(html):
         prop = (_attr(tag, "property") or _attr(tag, "name")).lower()
-        if prop in ("og:image", "og:image:url", "og:image:secure_url",
-                    "twitter:image", "twitter:image:src"):
+        if prop in (
+            "og:image",
+            "og:image:url",
+            "og:image:secure_url",
+            "twitter:image",
+            "twitter:image:src",
+        ):
             content = _attr(tag, "content")
             if content:
                 out.append(content)
@@ -240,8 +259,7 @@ def _is_noise(url: str) -> bool:
         return True
     # Real pin images are always /<size>/<aa>/<bb>/<cc>/<32 hex>.<ext>
     return not (
-        re.match(rf"^{re.escape(CDN)}/[0-9a-z]+/(?:[0-9a-f]{{2}}/){{3}}[0-9a-f]{{32}}\.",
-                 low)
+        re.match(rf"^{re.escape(CDN)}/[0-9a-z]+/(?:[0-9a-f]{{2}}/){{3}}[0-9a-f]{{32}}\.", low)
     )
 
 
@@ -266,7 +284,7 @@ def collect_images(html: str, extra_json: list[str] | None = None) -> list[Image
         return list(listed.values())
 
     # this pin's own image, plus any extra images belonging to it (story pins)
-    for text, src in [(html, "json-ld/meta")] + [(t, "api") for t in extra_json or []]:
+    for text in [html, *(extra_json or [])]:
         for u in _images_from_jsonld(text):
             _absorb(strong, seen, u, "json-ld")
         for u in _images_from_meta(text):
@@ -295,15 +313,19 @@ def _image_from_url(raw_url: str, source: str) -> Image | None:
     if not m:
         return Image(url=url, source=source)
     return Image(
-        url=url, digest=m.group("digest").lower(), hash_path=m.group("path").lower(),
-        ext=m.group("ext").lower(), size=m.group("size").lower(), source=source,
+        url=url,
+        digest=m.group("digest").lower(),
+        hash_path=m.group("path").lower(),
+        ext=m.group("ext").lower(),
+        size=m.group("size").lower(),
+        source=source,
     )
 
 
 def _absorb(bucket: dict[str, Image], seen: set[str], raw_url: str, source: str) -> None:
     """Add a URL to a bucket, keyed by image digest, keeping the best size."""
     img = _image_from_url(raw_url, source)
-    if img is None or img.key in seen and img.key not in bucket:
+    if img is None or (img.key in seen and img.key not in bucket):
         return
     if img.key not in bucket:
         bucket[img.key] = img
@@ -428,6 +450,7 @@ def print_browser_hint() -> None:
 
 def browser_available() -> bool:
     import importlib.util
+
     return importlib.util.find_spec("playwright") is not None
 
 
@@ -447,6 +470,7 @@ def fetch_via_browser(url: str, timeout: int, headless: bool = True):
     except ImportError:
         sys.exit(BROWSER_HINT)
 
+    html = ""
     captured: list[str] = []
     srcs: list[str] = []
 
@@ -487,20 +511,25 @@ def fetch_via_browser(url: str, timeout: int, headless: bool = True):
 
         try:
             html = page.content()
-            dom = page.eval_on_selector_all(
-                "img",
-                "els => els.map(e => e.currentSrc || e.src || '')",
-            )
-            srcs = [s for s in dom if isinstance(s, str) and "pinimg.com" in s]
-            for sel in ("img",):
-                srcset = page.eval_on_selector_all(
-                    sel, "els => els.map(e => e.getAttribute('srcset') || '')"
+            srcs = [
+                s
+                for s in page.eval_on_selector_all(
+                    "img", "els => els.map(e => e.currentSrc || e.src || '')"
                 )
-            for s in srcset:
+                if isinstance(s, str) and "pinimg.com" in s
+            ]
+            for s in page.eval_on_selector_all(
+                "img", "els => els.map(e => e.getAttribute('srcset') || '')"
+            ):
                 for part in (s or "").split(","):
                     cand = part.strip().split(" ")[0]
                     if cand.startswith("http") and "pinimg.com" in cand:
                         srcs.append(cand)
+        except Exception as exc:
+            # an extraction failure must not lose the captured XHR payloads
+            print(
+                f"  ! extraction from rendered page failed ({type(exc).__name__})", file=sys.stderr
+            )
         finally:
             browser.close()
 
@@ -510,6 +539,7 @@ def fetch_via_browser(url: str, timeout: int, headless: bool = True):
 # --------------------------------------------------------------------------- #
 # downloading
 # --------------------------------------------------------------------------- #
+
 
 def _looks_like_image(blob: bytes) -> bool:
     if blob[:3] == b"\xff\xd8\xff" or blob[:8] == b"\x89PNG\r\n\x1a\n":
@@ -553,7 +583,7 @@ def candidate_urls(img: Image, quality: str) -> list[str]:
                 push(img.variants[size])
     if img.url:
         push(img.url)
-    for size in sorted(img.variants, key=_rank):   # last resort: best first
+    for size in sorted(img.variants, key=_rank):  # last resort: best first
         push(img.variants[size])
     return urls
 
@@ -581,12 +611,25 @@ def download(
     if slug:
         stem = f"{stem}-{slug}"
 
+    # Cheap re-run: the response's magic bytes decide the final extension, so
+    # before spending any requests, see whether a file with a candidate
+    # extension is already on disk. (A previous run at a smaller -q counts as
+    # "have it" too; --force re-downloads at the requested quality.)
+    if not force:
+        for url in candidate_urls(img, quality):
+            out = dest_dir / f"{stem}.{url.rsplit('.', 1)[-1].lower()}"
+            if out.exists():
+                print(f"    · exists  {out.name}")
+                return out
+
     for url in candidate_urls(img, quality):
         for attempt in range(retries):
             try:
-                r = session.get(url, timeout=30, headers={**HEADERS, "Referer": "https://www.pinterest.com/"})
-                if r.status_code == 403:
-                    break          # wrong extension guess — try the next one
+                r = session.get(
+                    url, timeout=30, headers={**HEADERS, "Referer": "https://www.pinterest.com/"}
+                )
+                if r.status_code in (403, 404, 410):
+                    break  # wrong extension guess or gone — next URL
                 if r.status_code != 200:
                     if attempt == retries - 1:
                         break
@@ -614,6 +657,7 @@ def download(
 # --------------------------------------------------------------------------- #
 # driver
 # --------------------------------------------------------------------------- #
+
 
 def process(
     session: requests.Session,
@@ -645,9 +689,7 @@ def process(
         if required and not args.browser:
             print("    · this link loads its pins with JavaScript — using browser mode")
         print("    rendering with Chromium…")
-        html, captured, dom_srcs = fetch_via_browser(
-            canonical, args.timeout, not args.show_browser
-        )
+        html, captured, dom_srcs = fetch_via_browser(canonical, args.timeout, not args.show_browser)
     elif required:
         print("    ! --no-browser set; this link's pins will not be found")
 
@@ -666,7 +708,9 @@ def process(
                     images.append(i)
                     known.add(i.key)
 
-    title = page_title(html) or (captured and page_title(captured[0])) or ""
+    title = page_title(html)
+    if not title and captured:
+        title = page_title(captured[0])
     if not images:
         print("    ! no images found")
         return []
@@ -685,8 +729,16 @@ def process(
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
         futures = [
             pool.submit(
-                download, session, img, dest, args.quality, pin_id, title,
-                n, len(images), args.force,
+                download,
+                session,
+                img,
+                dest,
+                args.quality,
+                pin_id,
+                title,
+                n,
+                len(images),
+                args.force,
             )
             for n, img in enumerate(images, 1)
         ]
@@ -715,17 +767,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("-i", "--input", help="file of URLs, one per line")
     p.add_argument("-o", "--out", default="downloads", help="output directory (default: downloads)")
     p.add_argument(
-        "-q", "--quality", default="originals",
+        "-q",
+        "--quality",
+        default="originals",
         choices=["originals", "736x", "564x", "474x", "236x"],
         help="preferred resolution; falls back to smaller if unavailable (default: originals)",
     )
     mode = p.add_mutually_exclusive_group()
-    mode.add_argument("--browser", action="store_true",
-                      help="always render with Chromium (auto for links that need it)")
-    mode.add_argument("--no-browser", action="store_true",
-                      help="never use a browser, even for links that need one")
-    p.add_argument("--show-browser", action="store_true",
-                   help="run Chromium visibly instead of headless")
+    mode.add_argument(
+        "--browser",
+        action="store_true",
+        help="always render with Chromium (auto for links that need it)",
+    )
+    mode.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="never use a browser, even for links that need one",
+    )
+    p.add_argument(
+        "--show-browser", action="store_true", help="run Chromium visibly instead of headless"
+    )
     p.add_argument("-j", "--jobs", type=int, default=4, help="parallel downloads (default: 4)")
     p.add_argument("--max", type=int, default=0, help="cap images per URL (0 = all)")
     p.add_argument("--timeout", type=int, default=40, help="request timeout, seconds")
@@ -742,7 +803,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.input:
         try:
             lines = Path(args.input).read_text(encoding="utf-8").splitlines()
-            urls += [l.strip() for l in lines if l.strip() and not l.startswith("#")]
+            urls += [line.strip() for line in lines if line.strip() and not line.startswith("#")]
         except OSError as exc:
             sys.exit(f"cannot read {args.input}: {exc}")
     if not urls:
@@ -766,7 +827,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         dest = Path(args.out).resolve()
         print(f"\n{len(saved)} file(s) saved to {dest}")
-    return 0 if saved else 1
+    # an empty --dry-run is a successful listing, not a failure
+    return 0 if (saved or args.dry_run) else 1
 
 
 if __name__ == "__main__":

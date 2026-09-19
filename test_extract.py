@@ -2,7 +2,12 @@
 """Offline tests for pinterest-dl extraction logic. Run: python3 test_extract.py"""
 
 import json
+import shutil
+import tempfile
 import unittest
+from pathlib import Path
+
+import requests
 
 import pinterest_dl as pdl
 
@@ -18,7 +23,7 @@ C = "c" * 32
 # Synthetic fixtures. Repeated digits and sequential hex are deliberate: unlike
 # a plausible-looking random id, none of these can be mistaken for — or ever
 # become — a real identifier.
-PIN_ID = "1" * 18        # 18+ trailing digits, as classify() expects
+PIN_ID = "1" * 18  # 18+ trailing digits, as classify() expects
 MULTI_ID = "9" * 19
 SENDER = "2" * 18
 INVITE = "0" * 32
@@ -33,21 +38,24 @@ class TestClassify(unittest.TestCase):
 
     def test_feedback_pin_with_query(self):
         """The /feedback/ variant must still resolve to the bare pin path."""
-        url = (f"https://www.pinterest.com/pin/{PIN_ID}/feedback/"
-               f"?invite_code={INVITE}&sender_id={SENDER}")
+        url = (
+            f"https://www.pinterest.com/pin/{PIN_ID}/feedback/"
+            f"?invite_code={INVITE}&sender_id={SENDER}"
+        )
         kind, pid, canon = pdl.classify(url)
         self.assertEqual((kind, pid), ("pin", PIN_ID))
         self.assertEqual(canon, f"https://www.pinterest.com/pin/{PIN_ID}/")
 
     def test_slug_pin(self):
-        kind, pid, _ = pdl.classify(
-            f"https://www.pinterest.com/pin/{SLUG}--{PIN_ID}/")
+        kind, pid, _ = pdl.classify(f"https://www.pinterest.com/pin/{SLUG}--{PIN_ID}/")
         self.assertEqual((kind, pid), ("pin", PIN_ID))
 
     def test_multi_pin_keeps_query(self):
         """Multi-pin links need their invite_code, so the query must survive."""
-        url = (f"https://www.pinterest.com/multi-pin-share/{MULTI_ID}/"
-               f"?invite_code={INVITE}&sender={SENDER}")
+        url = (
+            f"https://www.pinterest.com/multi-pin-share/{MULTI_ID}/"
+            f"?invite_code={INVITE}&sender={SENDER}"
+        )
         kind, pid, canon = pdl.classify(url)
         self.assertEqual(kind, "multi-pin-share")
         self.assertEqual(pid, MULTI_ID)
@@ -71,8 +79,7 @@ class TestModeSelection(unittest.TestCase):
     def test_short_link_resolving_to_multi_pin_requires_browser(self):
         """pin.it links are opaque until resolved; once resolved to a
         multi-pin share, browser mode must be selected automatically."""
-        resolved = (f"https://www.pinterest.com/multi-pin-share/{MULTI_ID}/"
-                    f"?invite_code={INVITE}")
+        resolved = f"https://www.pinterest.com/multi-pin-share/{MULTI_ID}/?invite_code={INVITE}"
         kind, _, _ = pdl.classify(resolved)
         self.assertTrue(pdl.needs_browser(kind))
 
@@ -92,15 +99,16 @@ class TestNoise(unittest.TestCase):
     def test_css_background_noise_not_collected(self):
         """Pinterest embeds its own assets in inline CSS; those must not be
         mistaken for the pin's image."""
-        html = ("<style>:root{--x:url(" + cdn("originals", C, "png") +
-                ")}</style>")
+        html = "<style>:root{--x:url(" + cdn("originals", C, "png") + ")}</style>"
         self.assertEqual(pdl.collect_images(html), [])
 
 
 class TestExtraction(unittest.TestCase):
     def test_jsonld_original_wins(self):
-        html = ('<script type="application/ld+json">'
-                '{"@type":"Pin","image":"' + cdn("originals", A, "png") + '"}</script>')
+        html = (
+            '<script type="application/ld+json">'
+            '{"@type":"Pin","image":"' + cdn("originals", A, "png") + '"}</script>'
+        )
         imgs = pdl.collect_images(html)
         self.assertEqual(len(imgs), 1)
         self.assertEqual(imgs[0].digest, A)
@@ -108,16 +116,20 @@ class TestExtraction(unittest.TestCase):
         self.assertEqual(pdl.candidate_urls(imgs[0], "originals")[0], cdn("originals", A, "png"))
 
     def test_og_image(self):
-        html = ('<meta content="' + cdn("736x", A, "jpg") + '" property="og:image"/>')
+        html = '<meta content="' + cdn("736x", A, "jpg") + '" property="og:image"/>'
         imgs = pdl.collect_images(html)
         self.assertEqual([i.digest for i in imgs], [A])
 
     def test_original_extension_probe_order(self):
         """The original's extension differs from the thumbnail's, so we must
         probe candidate extensions starting with the known one."""
-        img = pdl.Image(url=cdn("736x", A, "jpg"), digest=A,
-                        hash_path=f"{A[:2]}/{A[2:4]}/{A[4:6]}/{A}",
-                        ext="jpg", size="736x")
+        img = pdl.Image(
+            url=cdn("736x", A, "jpg"),
+            digest=A,
+            hash_path=f"{A[:2]}/{A[2:4]}/{A[4:6]}/{A}",
+            ext="jpg",
+            size="736x",
+        )
         urls = pdl.candidate_urls(img, "originals")
         self.assertEqual(urls[0], cdn("originals", A, "jpg"))
         self.assertIn(cdn("originals", A, "png"), urls)
@@ -125,9 +137,11 @@ class TestExtraction(unittest.TestCase):
     def test_weak_sources_ignored_when_strong_present(self):
         """Related pins arrive via <link rel=preload>; they must not pollute a
         single pin's results when structured metadata exists."""
-        html = (f'<link rel="preload" as="image" href="{cdn("736x", B, "jpg")}"/>'
-                f'<script type="application/ld+json">'
-                f'{{"image":"{cdn("originals", A, "png")}"}}</script>')
+        html = (
+            f'<link rel="preload" as="image" href="{cdn("736x", B, "jpg")}"/>'
+            f'<script type="application/ld+json">'
+            f'{{"image":"{cdn("originals", A, "png")}"}}</script>'
+        )
         imgs = pdl.collect_images(html)
         self.assertEqual([i.digest for i in imgs], [A])
 
@@ -137,8 +151,7 @@ class TestExtraction(unittest.TestCase):
         self.assertEqual([i.digest for i in imgs], [B])
 
     def test_best_size_wins_per_digest(self):
-        html = (f'<img src="{cdn("236x", A, "jpg")}"/>'
-                f'<img src="{cdn("originals", A, "png")}"/>')
+        html = f'<img src="{cdn("236x", A, "jpg")}"/><img src="{cdn("originals", A, "png")}"/>'
         imgs = pdl.collect_images(html)
         self.assertEqual(len(imgs), 1)
         self.assertEqual(imgs[0].size, "originals")
@@ -162,11 +175,14 @@ class TestExtraction(unittest.TestCase):
         self.assertEqual({i.digest: i.size for i in imgs}[C], "736x")
 
     def test_quality_flag_honoured(self):
-        img = pdl.Image(url=cdn("originals", A, "png"), digest=A,
-                        hash_path=f"{A[:2]}/{A[2:4]}/{A[4:6]}/{A}",
-                        ext="png", size="originals",
-                        variants={"originals": cdn("originals", A, "png"),
-                                  "736x": cdn("736x", A, "jpg")})
+        img = pdl.Image(
+            url=cdn("originals", A, "png"),
+            digest=A,
+            hash_path=f"{A[:2]}/{A[2:4]}/{A[4:6]}/{A}",
+            ext="png",
+            size="originals",
+            variants={"originals": cdn("originals", A, "png"), "736x": cdn("736x", A, "jpg")},
+        )
         self.assertEqual(pdl.candidate_urls(img, "736x")[0], cdn("736x", A, "jpg"))
         self.assertEqual(pdl.candidate_urls(img, "originals")[0], cdn("originals", A, "png"))
 
@@ -182,60 +198,87 @@ class TestPinListPayload(unittest.TestCase):
     def _recommendation_body(self):
         """Body 0 in a real capture: a recommendations rail whose cover images
         are not one of the shared pins."""
-        return json.dumps({"resource_response": {"data": [{
-            "objects": [{"id": "rec1", "cover_images": [
-                {"236x": {"url": cdn("236x", C, "jpg")}},
-                {"750x": {"url": cdn("750x", C, "jpg")}},
-            ]}],
-        }]}})
+        return json.dumps(
+            {
+                "resource_response": {
+                    "data": [
+                        {
+                            "objects": [
+                                {
+                                    "id": "rec1",
+                                    "cover_images": [
+                                        {"236x": {"url": cdn("236x", C, "jpg")}},
+                                        {"750x": {"url": cdn("750x", C, "jpg")}},
+                                    ],
+                                }
+                            ],
+                        }
+                    ]
+                }
+            }
+        )
 
     def test_pins_array_is_authoritative(self):
         """The regression: a recommendations payload on the same page used to
         add a 4th image to a 3-pin share."""
         pins = [
-            {"id": "111", "title": "First", "images": {"orig": {"url": cdn("originals", A, "png")}}},
-            {"id": "222", "title": "Second", "images": {"orig": {"url": cdn("originals", B, "jpg")}}},
+            {
+                "id": "111",
+                "title": "First",
+                "images": {"orig": {"url": cdn("originals", A, "png")}},
+            },
+            {
+                "id": "222",
+                "title": "Second",
+                "images": {"orig": {"url": cdn("originals", B, "jpg")}},
+            },
             {"id": "333", "images": {"736x": {"url": cdn("736x", C, "jpg")}}},
         ]
         imgs = pdl.collect_images(
             "<html></html>",
             extra_json=[self._recommendation_body(), self._share_body(pins)],
         )
-        self.assertEqual(len(imgs), 3)                    # not 4
+        self.assertEqual(len(imgs), 3)  # not 4
         self.assertEqual([i.pin_id for i in imgs], ["111", "222", "333"])
         self.assertEqual([i.title for i in imgs], ["First", "Second", ""])
         self.assertEqual(imgs[0].source, "api")
 
     def test_orig_preferred_over_thumbnail(self):
-        pin = {"id": "1", "images": {
-            "236x": {"url": cdn("236x", A, "jpg")},
-            "orig": {"url": cdn("originals", A, "png")},
-        }}
+        pin = {
+            "id": "1",
+            "images": {
+                "236x": {"url": cdn("236x", A, "jpg")},
+                "orig": {"url": cdn("originals", A, "png")},
+            },
+        }
         imgs = pdl.collect_images("<html></html>", extra_json=[self._share_body([pin])])
         self.assertEqual(imgs[0].size, "originals")
 
     def test_title_in_dict_form(self):
-        pin = {"id": "1", "title": {"text": "Nested Title"},
-               "images": {"orig": {"url": cdn("originals", A, "jpg")}}}
+        pin = {
+            "id": "1",
+            "title": {"text": "Nested Title"},
+            "images": {"orig": {"url": cdn("originals", A, "jpg")}},
+        }
         imgs = pdl.collect_images("<html></html>", extra_json=[self._share_body([pin])])
         self.assertEqual(imgs[0].title, "Nested Title")
 
     def test_pin_without_images_skipped(self):
-        pins = [{"id": "1", "images": {}},
-                {"id": "2", "images": {"orig": {"url": cdn("originals", A, "jpg")}}}]
+        pins = [
+            {"id": "1", "images": {}},
+            {"id": "2", "images": {"orig": {"url": cdn("originals", A, "jpg")}}},
+        ]
         imgs = pdl.collect_images("<html></html>", extra_json=[self._share_body(pins)])
         self.assertEqual([i.pin_id for i in imgs], ["2"])
 
     def test_falls_back_when_nothing_usable(self):
         """A payload with no pins and no images must not suppress extraction
         from the HTML itself."""
-        imgs = pdl.collect_images(
-            f'<img src="{cdn("564x", A, "jpg")}"/>', extra_json=["{}"])
+        imgs = pdl.collect_images(f'<img src="{cdn("564x", A, "jpg")}"/>', extra_json=["{}"])
         self.assertEqual([i.digest for i in imgs], [A])
 
     def test_malformed_json_ignored(self):
-        imgs = pdl.collect_images(
-            f'<img src="{cdn("564x", A, "jpg")}"/>', extra_json=["{not json"])
+        imgs = pdl.collect_images(f'<img src="{cdn("564x", A, "jpg")}"/>', extra_json=["{not json"])
         self.assertEqual([i.digest for i in imgs], [A])
 
     def test_api_images_outrank_dom_thumbnails(self):
@@ -251,11 +294,15 @@ class TestPinListPayload(unittest.TestCase):
 
 class TestNaming(unittest.TestCase):
     def test_slug_sanitised_and_trimmed(self):
-        html = ('<script type="application/ld+json">'
-                '{"headline":"Example Pin Title, With Punctuation!"}</script>')
+        html = (
+            '<script type="application/ld+json">'
+            '{"headline":"Example Pin Title, With Punctuation!"}</script>'
+        )
         title = pdl.page_title(html)
-        self.assertEqual(pdl.re.sub(r"[^A-Za-z0-9]+", "-", title).strip("-"),
-                         "Example-Pin-Title-With-Punctuation")
+        self.assertEqual(
+            pdl.re.sub(r"[^A-Za-z0-9]+", "-", title).strip("-"),
+            "Example-Pin-Title-With-Punctuation",
+        )
 
     def test_title_falls_back_to_og(self):
         html = '<meta content="Some Pin Title" property="og:title"/>'
@@ -276,6 +323,53 @@ class TestImageValidation(unittest.TestCase):
     def test_html_error_page_rejected(self):
         """A 200 carrying an HTML error page must not be saved as an image."""
         self.assertFalse(pdl._looks_like_image(b"<html>not found</html>"))
+
+
+class TestDownload(unittest.TestCase):
+    """download() logic, exercised with a stubbed session (no network)."""
+
+    def _img(self, digest):
+        return pdl.Image(
+            url=cdn("736x", digest, "jpg"),
+            digest=digest,
+            hash_path=f"{digest[:2]}/{digest[2:4]}/{digest[4:6]}/{digest}",
+            ext="jpg",
+            size="736x",
+        )
+
+    class _Stub(requests.Session):
+        def __init__(self, status):
+            super().__init__()
+            self.status = status
+            self.calls = 0
+
+        def get(self, url, **kwargs):
+            self.calls += 1
+            r = requests.Response()
+            r.status_code = self.status
+            r._content = b"x"
+            return r
+
+    def setUp(self):
+        self.dest = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: shutil.rmtree(self.dest, ignore_errors=True))
+
+    def test_404_not_retried(self):
+        """A missing URL is never retried; each candidate is tried once."""
+        s = self._Stub(404)
+        out = pdl.download(s, self._img(A), self.dest, "originals", "", "t", 1, 1, force=False)
+        self.assertIsNone(out)
+        # 4 originals probes + the 736x fallback, one call each
+        self.assertEqual(s.calls, 5)
+
+    def test_existing_file_skips_network(self):
+        """Re-runs must not re-download: an on-disk candidate destination is
+        detected before the first request."""
+        s = self._Stub(200)
+        (self.dest / f"{A[:16]}-t.jpg").write_bytes(b"x")
+        out = pdl.download(s, self._img(A), self.dest, "736x", "", "t", 1, 1, force=False)
+        self.assertIsNotNone(out)
+        self.assertEqual(s.calls, 0)
 
 
 if __name__ == "__main__":
