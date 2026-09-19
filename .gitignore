@@ -1,0 +1,13 @@
+# downloaded images, caches
+downloads/
+__pycache__/
+*.py[cod]
+
+# browser mode
+.venv/
+venv/
+
+# editors / OS
+.DS_Store
+.idea/
+.vscode/
