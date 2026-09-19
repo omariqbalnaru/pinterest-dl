@@ -4,8 +4,12 @@ Download images from Pinterest pins and multi-pin share links, at the highest
 resolution Pinterest serves.
 
 ```bash
-pip install requests
+git clone <this-repo> && cd pinterest-dl
+pip install .            # requests is pulled in automatically
+pip install ".[browser]" # + Playwright, for multi-pin share links
 python pinterest_dl.py "https://www.pinterest.com/pin/<pin-id>/"
+# or, once installed:
+pinterest-dl "https://www.pinterest.com/pin/<pin-id>/"
 ```
 
 (Every URL in this README is a placeholder — `<pin-id>`, `<code>`, `<url>` are
@@ -108,17 +112,20 @@ trusted; `<link rel=preload>` and `<img>` tags (which also carry *related* pins)
 are consulted only when nothing structured is present.
 
 Downloads are written as `<pin-id>-<title-slug>.<ext>`, skip files that already
-exist unless `--force` is given, and are validated by magic bytes so an HTML
-error page returned with status 200 is never saved.
+exist unless `--force` is given (without hitting the network at all — the
+skip is checked before any request), and are validated by magic bytes so an
+HTML error page returned with status 200 is never saved.
 
 ## Tests
 
 ```bash
 python3 test_extract.py
+ruff check .          # lint (ruff is in the [dev] extra)
 ```
 
-21 offline tests covering URL parsing, noise rejection, source tiering,
-original-extension probing, quality selection, and filename generation.
+31 offline tests covering URL parsing, noise rejection, source tiering,
+original-extension probing, quality selection, and filename generation. CI
+runs the tests plus ruff on Python 3.10 and 3.12.
 
 ## Note
 
