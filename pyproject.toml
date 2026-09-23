@@ -31,6 +31,12 @@ dev = ["ruff>=0.4"]
 [project.scripts]
 pinterest-dl = "pinterest_dl:main"
 
+# Auto-discovery would pick up downloads/ as a namespace package and then skip
+# the top-level module entirely, leaving the pinterest-dl script unable to
+# import. Name the module instead of trusting flat-layout discovery.
+[tool.setuptools]
+py-modules = ["pinterest_dl"]
+
 [project.urls]
 Homepage = "https://github.com/omariqbalnaru/pinterest-dl"
 
