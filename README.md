@@ -49,7 +49,7 @@ python pinterest_dl.py --json <url>
 
 | Flag | Meaning |
 |---|---|
-| `-o, --out` | output directory (default `downloads`) |
+| `-o, --out` | output directory (default: current directory) |
 | `-q, --quality` | `originals` (default), `736x`, `564x`, `474x`, `236x` |
 | `--browser` | always render with Chromium (otherwise automatic when needed) |
 | `--no-browser` | never render — static only, even for links that need it |

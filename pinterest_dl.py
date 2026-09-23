@@ -765,7 +765,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("urls", nargs="*", help="one or more Pinterest URLs")
     p.add_argument("-i", "--input", help="file of URLs, one per line")
-    p.add_argument("-o", "--out", default="downloads", help="output directory (default: downloads)")
+    p.add_argument(
+        "-o", "--out", default=".", help="output directory (default: current directory)"
+    )
     p.add_argument(
         "-q",
         "--quality",
